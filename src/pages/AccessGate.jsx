@@ -583,7 +583,6 @@ const AccessGate = () => {
                     </h1>
                 </div>
 
-                {/* Steps Header (Simplified) */}
                 <div className="flex items-center justify-between mb-8 px-8">
                     {steps.map((step) => (
                         <div key={step.id} className="flex flex-col items-center gap-2">
@@ -597,6 +596,12 @@ const AccessGate = () => {
                             )}>{step.label}</span>
                         </div>
                     ))}
+                </div>
+
+                {/* DEBUG ENV BLOCK - REMOVE LATER */}
+                <div className="p-2 mb-4 bg-red-900/50 border border-red-500 rounded text-[8px] font-mono text-white overflow-hidden">
+                    VITE_FIREBASE_API_KEY: {import.meta.env.VITE_FIREBASE_API_KEY ? "EXISTS" : "UNDEFINED"} <br />
+                    REACT_APP_FIREBASE_API_KEY: {import.meta.env.REACT_APP_FIREBASE_API_KEY ? "EXISTS" : "UNDEFINED"} <br />
                 </div>
 
                 <GlassPanel className="p-4 md:p-8 relative overflow-hidden" corners>
