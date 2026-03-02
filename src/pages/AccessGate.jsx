@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, Check, User, Phone, FileText, Shield, Mail, Lock
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
+import { auth } from '../lib/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '../context/ToastContext';
 import StarField from '../components/StarField';
 import GridOverlay from '../components/GridOverlay';
@@ -135,7 +137,6 @@ const AccessGate = () => {
     const sendOtp = async () => {
         setMessage('');
 
-        // Validation
         if (authMethod === 'email' && !formData.email.includes('@')) {
             setMessage("Invalid email address.");
             return;
@@ -147,24 +148,22 @@ const AccessGate = () => {
 
         setIsLoading(true);
         try {
-            const payload = authMethod === 'email'
-                ? { email: formData.email }
-                : { mobile: formData.phone, country_code: formData.countryCode };
-
-            const endpoint = authMethod === 'email' ? '/auth/otp/send' : '/auth/otp/mobile/send';
-            const res = await apiRequest(endpoint, 'POST', payload);
-            setOtpState('verify');
-            showToast("SECURITY PROTOCOL DISPATCHED", "info");
-
-            // DEV: IF DEV CODE IS RETURNED, SHOW IT
-            if (res.dev_mode_code || res.dev_code) {
-                setMessage(`DEV_MODE: CODE IS ${res.dev_mode_code || res.dev_code}`);
-            } else {
-                setMessage(res.message || "Access Protocol Dispatched.");
+            if (authMethod === 'mobile') {
+                if (!window.recaptchaVerifier) {
+                    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+                }
+                const fullPhone = formData.countryCode + formData.phone;
+                const confirmationResult = await signInWithPhoneNumber(auth, fullPhone, window.recaptchaVerifier);
+                window.confirmationResult = confirmationResult;
+                setOtpState('verify');
+                showToast("SMS DISPATCHED VIA FIREBASE", "success");
+            } else if (authMethod === 'email') {
+                // Modified to use Email/Password since pure OTP isn't supported without backend
+                setOtpState('verify');
             }
         } catch (e) {
-            showToast(`PROTOCOL DISPATCH FAILED: ${e.message}`, "error");
-            setMessage("Failed to initialize security protocol.");
+            showToast(`AUTH FAILED: ${e.message}`, "error");
+            setMessage(e.message);
         } finally {
             setIsLoading(false);
         }
@@ -173,42 +172,39 @@ const AccessGate = () => {
     const verifyOtp = async () => {
         setIsLoading(true);
         try {
-            const payload = {
-                code: formData.otp,
-                ...(authMethod === 'email' ? { email: formData.email } : { mobile: formData.phone, country_code: formData.countryCode })
-            };
+            let userObj = null;
 
-            const endpoint = authMethod === 'email' ? '/auth/otp/verify' : '/auth/otp/mobile/verify';
-            const user = await apiRequest(endpoint, 'POST', payload);
-
-            // Login with returned user data
-            await login(user.email, user);
-            showToast("IDENTITY VERIFIED. WELCOME AGENT.", "success");
-
-            setFormData(prev => ({
-                ...prev,
-                name: user.name || 'Agent',
-                email: user.email, // Sync the unique identifier (email or phone)
-                role: user.role // Capture role for Org Logic
-            }));
-
-            // ADMIN SHORTCUT (Bypass Org Setup if Super Admin, or force them to specific flow)
-            // For now, let everyone go to Step 5 (Org Setup) unless they are already in an org
-            if (user.organization_id) {
-                showToast("ORGANIZATION PROTOCOLS SYNCED.", "success");
-                setCurrentStep(2); // Regular onboarding if needed, or skip? 
-                // Actually they need to fill profile first (Step 2)
-            } else {
-                setCurrentStep(2);
+            if (authMethod === 'mobile') {
+                const result = await window.confirmationResult.confirm(formData.otp);
+                userObj = { email: result.user.phoneNumber, name: 'Agent', role: 'user' };
+            } else if (authMethod === 'email') {
+                try {
+                    const result = await signInWithEmailAndPassword(auth, formData.email, formData.otp);
+                    userObj = { email: result.user.email, name: 'Agent', role: 'user' };
+                } catch (error) {
+                    if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                        const result = await createUserWithEmailAndPassword(auth, formData.email, formData.otp);
+                        userObj = { email: result.user.email, name: 'Agent', role: 'user' };
+                    } else throw error;
+                }
             }
 
-            // BYPASS REMOVED: All agents must verify profile and sector assignment.
-            // if (locationState?.role === 'admin' || locationState?.role === 'super_admin') { ... }
+            // Sync with local context
+            setFormData(prev => ({
+                ...prev,
+                name: userObj.name,
+                email: userObj.email,
+                role: userObj.role
+            }));
 
+            await login(userObj.email, userObj);
+
+            showToast("IDENTITY VERIFIED (FIREBASE). WELCOME AGENT.", "success");
             setCurrentStep(2);
+
         } catch (e) {
-            showToast(`INVALID SECURITY CODE: ${e.message}`, "error");
-            setMessage("Invalid code.");
+            showToast(`ACCESS DENIED: ${e.message}`, "error");
+            setMessage("Invalid credentials.");
         } finally {
             setIsLoading(false);
         }
@@ -360,7 +356,7 @@ const AccessGate = () => {
                         onClick={() => { setAuthMethod('email'); setMessage(''); setOtpState('input'); setFormData(p => ({ ...p, otp: '' })); }}
                         className={cn("flex-1 py-1 px-3 text-xs font-mono rounded transition-all whitespace-nowrap", authMethod === 'email' ? 'bg-primary/20 text-primary' : 'text-muted-foreground')}
                     >
-                        EMAIL OTP
+                        EMAIL/PASS
                     </button>
                     <button
                         onClick={() => { setAuthMethod('mobile'); setMessage(''); setOtpState('input'); setFormData(p => ({ ...p, otp: '' })); }}
@@ -433,8 +429,9 @@ const AccessGate = () => {
                                     </div>
                                 </div>
                             )}
+                            <div id="recaptcha-container"></div>
                             <NeonButton onClick={sendOtp} disabled={isLoading} className="w-full">
-                                {isLoading ? 'INITIALIZING...' : 'GET OTP'}
+                                {isLoading ? 'INITIALIZING...' : (authMethod === 'email' ? 'ENTER PASSWORD' : 'GET OTP')}
                             </NeonButton>
                         </>
                     ) : (
@@ -455,12 +452,12 @@ const AccessGate = () => {
                                 )}
 
                                 <input
-                                    type="text"
-                                    maxLength="6"
+                                    type={authMethod === 'email' ? "password" : "text"}
+                                    maxLength={authMethod === 'email' ? "30" : "6"}
                                     value={formData.otp}
                                     onChange={(e) => setFormData(prev => ({ ...prev, otp: e.target.value }))}
-                                    placeholder="000000"
-                                    className="w-full p-4 bg-muted/30 border border-border rounded-lg font-mono text-2xl text-center tracking-[1rem] focus:border-primary focus:outline-none text-white"
+                                    placeholder={authMethod === 'email' ? "PASSWORD" : "000000"}
+                                    className="w-full p-4 bg-muted/30 border border-border rounded-lg font-mono text-2xl text-center tracking-[0.5rem] focus:border-primary focus:outline-none text-white"
                                 />
                             </div>
                             <NeonButton onClick={verifyOtp} disabled={isLoading} className="w-full">
