@@ -1,4 +1,4 @@
-export const API_BASE = "http://127.0.0.1:7860"; // Forced IPv4 for Windows stability
+export const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:7860"; // Uses HF Space URL in prod
 
 export async function apiRequest(endpoint, method = "GET", body = null, token = null) {
     const headers = {
