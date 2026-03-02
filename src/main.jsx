@@ -9,7 +9,7 @@ import './index.css';
 
 // Using a placeholder Client ID. 
 // For real auth, the user must provide a valid Google Cloud Client ID.
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "PLACEHOLDER_ID";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || import.meta.env.REACT_APP_GOOGLE_CLIENT_ID || "PLACEHOLDER_ID";
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

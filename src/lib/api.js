@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:7860"; // Uses HF Space URL in prod
+export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.REACT_APP_API_URL || "http://127.0.0.1:7860"; // Uses HF Space URL in prod
 
 export async function apiRequest(endpoint, method = "GET", body = null, token = null) {
     const headers = {
