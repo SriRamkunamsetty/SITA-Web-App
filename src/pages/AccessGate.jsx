@@ -598,12 +598,6 @@ const AccessGate = () => {
                     ))}
                 </div>
 
-                {/* DEBUG ENV BLOCK - REMOVE LATER */}
-                <div className="p-2 mb-4 bg-red-900/50 border border-red-500 rounded text-[8px] font-mono text-white overflow-hidden">
-                    VITE_FIREBASE_API_KEY: {import.meta.env.VITE_FIREBASE_API_KEY ? "EXISTS" : "UNDEFINED"} <br />
-                    REACT_APP_FIREBASE_API_KEY: {import.meta.env.REACT_APP_FIREBASE_API_KEY ? "EXISTS" : "UNDEFINED"} <br />
-                </div>
-
                 <GlassPanel className="p-4 md:p-8 relative overflow-hidden" corners>
                     {/* Content render based on step, customized for first 2 steps */}
                     {currentStep === 1 ? renderStep1() :
